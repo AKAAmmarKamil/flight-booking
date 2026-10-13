@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: flightbooking
+      POSTGRES_USER: ${POSTGRES_USER:-booking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-booking}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  aerohub-mock:
+    build:
+      context: .
+      dockerfile: src/AeroHubMock/Dockerfile
+    environment:
+      Auth__Username: ${AEROHUB_USERNAME:-flamingo}
+      Auth__Password: ${AEROHUB_PASSWORD:-secret}
+    ports:
+      - "8081:8080"
+
+  skylink-mock:
+    build:
+      context: .
+      dockerfile: src/SkyLinkMock/Dockerfile
+    environment:
+      Auth__PartnerId: ${SKYLINK_PARTNER_ID:-FLM001}
+      Auth__PartnerKey: ${SKYLINK_PARTNER_KEY:-k3y-123}
+    ports:
+      - "8082:8080"
+
+  booking-api:
+    build:
+      context: .
+      dockerfile: src/BookingApi/Dockerfile
+    environment:
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=flightbooking;Username=${POSTGRES_USER:-booking};Password=${POSTGRES_PASSWORD:-booking}
+      AeroHub__BaseUrl: http://aerohub-mock:8080
+      AeroHub__Username: ${AEROHUB_USERNAME:-flamingo}
+      AeroHub__Password: ${AEROHUB_PASSWORD:-secret}
+      SkyLink__BaseUrl: http://skylink-mock:8080
+      SkyLink__PartnerId: ${SKYLINK_PARTNER_ID:-FLM001}
+      SkyLink__PartnerKey: ${SKYLINK_PARTNER_KEY:-k3y-123}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      aerohub-mock:
+        condition: service_started
+      skylink-mock:
+        condition: service_started
