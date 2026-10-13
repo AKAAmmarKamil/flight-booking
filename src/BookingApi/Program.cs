@@ -1,4 +1,5 @@
 using BookingApi.Application.Pricing;
+using BookingApi.Infrastructure.Suppliers.AeroHub;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,9 @@ builder.Services.AddOptions<PricingOptions>()
     .Validate(options => options.RatesToIqd.Count > 0 && options.RatesToIqd.Values.All(rate => rate > 0), "Pricing:RatesToIqd must contain positive rates.")
     .ValidateOnStart();
 builder.Services.AddSingleton<PriceCalculator>();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddAeroHubSupplier();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
