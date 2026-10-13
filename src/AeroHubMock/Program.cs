@@ -34,13 +34,13 @@ var secured = app.MapGroup("").AddEndpointFilter(async (context, next) =>
         : Results.Unauthorized();
 });
 
-secured.MapPost("/search", async (SearchRequest request, CancellationToken ct) =>
+secured.MapPost("/search", async (SearchRequest request, CancellationToken cancellationToken) =>
 {
-    await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(1000, 8001)), ct);
+    await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(1000, 8001)), cancellationToken);
     return Results.Ok(new SearchResponse(FakeData.Offers(request)));
 });
 
-secured.MapPost("/book", async (BookRequest request, CancellationToken ct) =>
+secured.MapPost("/book", async (BookRequest request, CancellationToken cancellationToken) =>
 {
     var roll = Random.Shared.Next(100);
 
@@ -51,7 +51,7 @@ secured.MapPost("/book", async (BookRequest request, CancellationToken ct) =>
 
     if (roll < 40)
     {
-        await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
     }
 
     return Results.Ok(new BookResponse("CONFIRMED", FakeData.Pnr(), FakeData.TicketNumber()));

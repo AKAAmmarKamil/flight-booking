@@ -26,14 +26,14 @@ IResult InvalidSign() => Reply.Error(ErrorCodes.InvalidSign, "invalid sign");
 
 IResult OrderNotFound() => Reply.Error(ErrorCodes.OrderNotFound, "order not found");
 
-app.MapPost("/shopping", async (ShoppingRequest request, CancellationToken ct) =>
+app.MapPost("/shopping", async (ShoppingRequest request, CancellationToken cancellationToken) =>
 {
     if (!IsSigned(request.Auth))
     {
         return InvalidSign();
     }
 
-    await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(200, 1801)), ct);
+    await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(200, 1801)), cancellationToken);
     return Reply.Ok(FakeData.Shopping(request.Search));
 });
 
