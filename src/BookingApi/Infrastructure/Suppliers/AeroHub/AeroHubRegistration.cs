@@ -1,10 +1,14 @@
 using BookingApi.Application.Suppliers;
+using BookingApi.Infrastructure.Http;
 using Microsoft.Extensions.Options;
 
 namespace BookingApi.Infrastructure.Suppliers.AeroHub;
 
 public static class AeroHubRegistration
 {
+    private static readonly IReadOnlySet<string> SensitiveFields =
+        new HashSet<string>(["password", "access_token"], StringComparer.OrdinalIgnoreCase);
+
     public static IServiceCollection AddAeroHubSupplier(this IServiceCollection services)
     {
         services.AddOptions<AeroHubOptions>()
@@ -19,7 +23,11 @@ public static class AeroHubRegistration
         {
             var options = serviceProvider.GetRequiredService<IOptions<AeroHubOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl);
-        });
+        })
+        .AddHttpMessageHandler(serviceProvider => new SupplierLoggingHandler(
+            AeroHubSupplier.SupplierName,
+            SensitiveFields,
+            serviceProvider.GetRequiredService<ILogger<SupplierLoggingHandler>>()));
 
         return services;
     }

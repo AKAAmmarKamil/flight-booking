@@ -1,10 +1,14 @@
 using BookingApi.Application.Suppliers;
+using BookingApi.Infrastructure.Http;
 using Microsoft.Extensions.Options;
 
 namespace BookingApi.Infrastructure.Suppliers.SkyLink;
 
 public static class SkyLinkRegistration
 {
+    private static readonly IReadOnlySet<string> SensitiveFields =
+        new HashSet<string>(["sign"], StringComparer.OrdinalIgnoreCase);
+
     public static IServiceCollection AddSkyLinkSupplier(this IServiceCollection services)
     {
         services.AddOptions<SkyLinkOptions>()
@@ -18,7 +22,11 @@ public static class SkyLinkRegistration
         {
             var options = serviceProvider.GetRequiredService<IOptions<SkyLinkOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl);
-        });
+        })
+        .AddHttpMessageHandler(serviceProvider => new SupplierLoggingHandler(
+            SkyLinkSupplier.SupplierName,
+            SensitiveFields,
+            serviceProvider.GetRequiredService<ILogger<SupplierLoggingHandler>>()));
 
         return services;
     }
