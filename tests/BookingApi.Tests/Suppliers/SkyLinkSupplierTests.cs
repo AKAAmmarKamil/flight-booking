@@ -166,6 +166,22 @@ public class SkyLinkSupplierTests
     }
 
     [Fact]
+    public async Task BookOutcome_SkyLink_B029_at_order_is_Unknown_and_ticketing_is_never_called()
+    {
+        var handler = HandlerAnsweringBookWith(
+            """{ "errorCode": "B029", "errorMsg": "duplicate order" }""",
+            _ => throw new InvalidOperationException("ticketing must not be called"));
+
+        var result = await CreateSupplier(handler).BookAsync(Tk785Offer(), AliHassan, "booking-1", CancellationToken.None);
+
+        Assert.Equal(SupplierBookingOutcome.Unknown, result.Outcome);
+        Assert.Contains("B029", result.Note);
+        Assert.Equal(0, handler.CallsTo("/ticketing"));
+        Assert.Contains("may have been issued", result.Note);
+        Assert.Contains("booking-1", result.Note);
+    }
+
+    [Fact]
     public async Task BookOutcome_SkyLink_B050_at_order_is_Refused_and_ticketing_is_never_called()
     {
         var handler = HandlerAnsweringBookWith(

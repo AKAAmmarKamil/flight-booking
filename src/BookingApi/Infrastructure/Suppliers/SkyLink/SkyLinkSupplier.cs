@@ -12,6 +12,7 @@ public sealed class SkyLinkSupplier : IFlightSupplier
 
     private const string SuccessCode = "0";
     private const string PrepaidBalanceTooLowCode = "B022";
+    private const string DuplicateOrderCode = "B029";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -54,12 +55,17 @@ public sealed class SkyLinkSupplier : IFlightSupplier
         try
         {
             var order = await PostAsync<SkyLinkOrderRequest, SkyLinkOrderData>("/order", orderBody, bookTimeout.Token);
-            if (order.ErrorCode != SuccessCode)
+            switch (order.ErrorCode)
             {
-                return SupplierBookingResult.Refused(
-                    $"SkyLink refused the order ({order.ErrorCode} {order.ErrorMsg}): no ticket was issued.");
+                case SuccessCode:
+                    break;
+                case DuplicateOrderCode:
+                        return SupplierBookingResult.Unknown(
+                            $"SkyLink /order returned {order.ErrorCode} {order.ErrorMsg} for buyerOrder {bookingId}: a ticket may have been issued; check with SkyLink.");
+                default:
+                    return SupplierBookingResult.Refused(
+                        $"SkyLink refused the order ({order.ErrorCode} {order.ErrorMsg}): no ticket was issued.");
             }
-
             orderNum = order.Data!.OrderNum;
 
             var ticketing = await PostAsync<SkyLinkTicketingRequest, SkyLinkOrderData>(
