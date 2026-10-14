@@ -20,6 +20,13 @@ public static class PersistenceRegistration
         return services;
     }
 
+    public static async Task MigrateDatabaseAsync(this WebApplication app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BookingDbContext>();
+        await dbContext.Database.MigrateAsync();
+    }
+
     public static void ConfigureDbContext(DbContextOptionsBuilder options, string connectionString)
     {
         options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention();
