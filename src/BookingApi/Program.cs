@@ -1,5 +1,6 @@
 using BookingApi.Application.Pricing;
 using BookingApi.Infrastructure.Suppliers.AeroHub;
+using BookingApi.Infrastructure.Suppliers.SkyLink;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,7 @@ builder.Services.AddSingleton<PriceCalculator>();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddAeroHubSupplier();
+builder.Services.AddSkyLinkSupplier();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
