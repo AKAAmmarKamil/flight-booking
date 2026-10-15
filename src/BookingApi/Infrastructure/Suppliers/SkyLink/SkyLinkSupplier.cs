@@ -30,6 +30,8 @@ public sealed class SkyLinkSupplier : IFlightSupplier
     }
 
     public string Name => SupplierName;
+    
+    public string OfferIdPrefix => "SL";
 
     public async Task<IReadOnlyList<SupplierOffer>> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
     {

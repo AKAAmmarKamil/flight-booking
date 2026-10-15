@@ -1,4 +1,5 @@
 using BookingApi.Application.Pricing;
+using BookingApi.Application.Search;
 using BookingApi.Application.Wallets;
 
 namespace BookingApi.Application;
@@ -13,7 +14,13 @@ public static class ApplicationRegistration
             .ValidateOnStart();
         services.AddSingleton<PriceCalculator>();
 
+        services.AddOptions<SearchOptions>()
+            .BindConfiguration("Search")
+            .Validate(options => options.TimeoutSeconds > 0, "Search:TimeoutSeconds must be positive.")
+            .ValidateOnStart();
+
         services.AddScoped<IWalletService, WalletService>();
+        services.AddScoped<ISearchService, SearchService>();
 
         return services;
     }

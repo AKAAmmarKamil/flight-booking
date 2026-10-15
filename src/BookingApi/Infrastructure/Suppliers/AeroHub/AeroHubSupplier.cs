@@ -29,6 +29,8 @@ public sealed class AeroHubSupplier : IFlightSupplier
 
     public string Name => SupplierName;
 
+    public string OfferIdPrefix => "AH";
+
     public async Task<IReadOnlyList<SupplierOffer>> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
     {
         var body = new AeroHubSearchRequest(request.From, request.To, request.Date, request.Adults);
