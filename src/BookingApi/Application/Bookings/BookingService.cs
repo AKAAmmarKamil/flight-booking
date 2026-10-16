@@ -155,6 +155,40 @@ public class BookingService : IBookingService
         return new ServiceResponse<BookingResultDto>(ToBookingResultDto(booking));
     }
 
+    public async Task<ServiceResponse<BookingDto>> GetByIdAsync(string bookingId, CancellationToken cancellationToken)
+    {
+        var booking = await _dbContext.Bookings
+            .Where(booking => booking.Id == bookingId)
+            .Select(booking => new BookingDto
+            {
+                BookingId = booking.Id,
+                Status = booking.Status,
+                PriceIqd = booking.PriceIqd,
+                Supplier = booking.Supplier,
+                Pnr = booking.Pnr,
+                TicketNumber = booking.TicketNumber,
+                History = booking.History
+                    .OrderBy(history => history.At)
+                    .ThenBy(history => history.Id)
+                    .Select(history => new BookingStatusHistoryDto
+                    {
+                        At = history.At,
+                        From = history.FromStatus,
+                        To = history.ToStatus,
+                        Note = history.Note
+                    })
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (booking == null)
+        {
+            return new ServiceResponse<BookingDto>(ServiceError.NotFound, $"Booking '{bookingId}' does not exist.");
+        }
+
+        return new ServiceResponse<BookingDto>(booking);
+    }
+
     private async Task<SupplierBookingResult> CallSupplierAsync(IFlightSupplier supplier, Offer offer, Booking booking)
     {
         var passenger = new Passenger(booking.PassengerFirstName, booking.PassengerLastName, booking.PassengerBirthDate);

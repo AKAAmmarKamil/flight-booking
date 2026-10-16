@@ -31,4 +31,13 @@ public class BookingsController : BaseController
         var response = await _bookingService.BookAsync(idempotencyKey, form, cancellationToken);
         return ToActionResult(response);
     }
+
+    [HttpGet("{bookingId}")]
+    [ProducesResponseType(typeof(BookingDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(string bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _bookingService.GetByIdAsync(bookingId, cancellationToken);
+        return ToActionResult(response);
+    }
 }
