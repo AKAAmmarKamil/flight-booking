@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using BookingApi.Application.Common;
+using BookingApi.Application.Suppliers;
 using BookingApi.Domain;
 using BookingApi.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -13,12 +14,20 @@ public class BookingService : IBookingService
     private const string IdempotencyKeyIndexName = "ix_bookings_idempotency_key";
 
     private readonly BookingDbContext _dbContext;
+    private readonly IEnumerable<IFlightSupplier> _suppliers;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<BookingService> _logger;
 
-    public BookingService(BookingDbContext dbContext, TimeProvider timeProvider)
+    public BookingService(
+        BookingDbContext dbContext,
+        IEnumerable<IFlightSupplier> suppliers,
+        TimeProvider timeProvider,
+        ILogger<BookingService> logger)
     {
         _dbContext = dbContext;
+        _suppliers = suppliers;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     public async Task<ServiceResponse<BookingResultDto>> BookAsync(string idempotencyKey, BookingForm form, CancellationToken cancellationToken)
@@ -50,6 +59,9 @@ public class BookingService : IBookingService
             return new ServiceResponse<BookingResultDto>(ServiceError.InvalidRequest,
                 $"Offer '{offer.Id}' was priced for {offer.Adults} adults, but a booking takes one passenger. Search again with adults=1.");
         }
+
+        var supplier = _suppliers.SingleOrDefault(supplier => supplier.Name == offer.Supplier)
+            ?? throw new InvalidOperationException($"No supplier named '{offer.Supplier}' is registered for offer '{offer.Id}'.");
 
         var priceIqd = offer.PriceIqd;
         var booking = new Booking
@@ -122,8 +134,65 @@ public class BookingService : IBookingService
         // Not the request token: a commit cancelled half-way may still succeed on the server, leaving us unaware the money was taken.
         await transaction.CommitAsync(CancellationToken.None);
 
+        var result = await CallSupplierAsync(supplier, offer, booking);
+
+        booking.SupplierReference = result.SupplierReference;
+        booking.Pnr = result.Pnr;
+        booking.TicketNumber = result.TicketNumber;
+        booking.MoveTo(ToBookingStatus(result.Outcome), result.Note, _timeProvider.GetUtcNow());
+        // Not the request token: the supplier has already answered, and its answer must be recorded.
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        if (booking.Status == BookingStatus.RequiresReview)
+        {
+            _logger.LogWarning("Booking {BookingId} requires review: {Note}", booking.Id, result.Note);
+        }
+        else
+        {
+            _logger.LogInformation("Booking {BookingId} is {Status}: {Note}", booking.Id, booking.Status, result.Note);
+        }
+
         return new ServiceResponse<BookingResultDto>(ToBookingResultDto(booking));
     }
+
+    private async Task<SupplierBookingResult> CallSupplierAsync(IFlightSupplier supplier, Offer offer, Booking booking)
+    {
+        var passenger = new Passenger(booking.PassengerFirstName, booking.PassengerLastName, booking.PassengerBirthDate);
+        try
+        {
+            // Not the request token: a client disconnect must not abort a paid booking; the adapter's own book timeout ends the call.
+            return await supplier.BookAsync(ToSupplierOffer(offer), passenger, booking.Id, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "{Supplier} booking call for {BookingId} failed unexpectedly.", supplier.Name, booking.Id);
+            return SupplierBookingResult.Unknown(
+                $"{supplier.Name} call failed unexpectedly ({exception.GetType().Name}): a ticket may have been issued; check with {supplier.Name}.");
+        }
+    }
+
+    private static BookingStatus ToBookingStatus(SupplierBookingOutcome outcome) =>
+        outcome switch
+        {
+            SupplierBookingOutcome.Confirmed => BookingStatus.Confirmed,
+            SupplierBookingOutcome.Pending => BookingStatus.Pending,
+            SupplierBookingOutcome.Refused or SupplierBookingOutcome.Unknown => BookingStatus.RequiresReview,
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No booking status is mapped for this supplier outcome.")
+        };
+
+    private static SupplierOffer ToSupplierOffer(Offer offer) =>
+        new(
+            Supplier: offer.Supplier,
+            SupplierReference: offer.SupplierReference,
+            Airline: offer.Airline,
+            FlightNumber: offer.FlightNumber,
+            From: offer.From,
+            To: offer.To,
+            Departure: offer.Departure,
+            Arrival: offer.Arrival,
+            Stops: offer.Stops,
+            OriginalPrice: offer.OriginalPrice,
+            OriginalCurrency: offer.OriginalCurrency);
 
     private Task<Booking?> FindByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken) =>
         _dbContext.Bookings
