@@ -170,6 +170,43 @@ public class PendingBookingProcessorTests
         Assert.Equal(BookingStatus.Confirmed, await GetStatusAsync(dbContext, issuedBooking.Id));
     }
 
+    [Fact]
+    public async Task PendingJob_booking_changed_by_another_instance_is_not_overwritten()
+    {
+        var contestedOrderNum = UniqueOrderNum();
+        var nextOrderNum = UniqueOrderNum();
+        var contestedBooking = await SavePendingBookingAsync(contestedOrderNum);
+        _time.Advance(TimeSpan.FromSeconds(1));
+        var nextBooking = await SavePendingBookingAsync(nextOrderNum);
+        var skyLink = new StubHttpMessageHandler(async (request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == $"/order/{contestedOrderNum}")
+            {
+                // Another instance finishes this booking while our status call is still running.
+                await using var otherInstance = _postgres.CreateDbContext();
+                var booking = await otherInstance.Bookings.SingleAsync(saved => saved.Id == contestedBooking.Id);
+                booking.MoveTo(BookingStatus.RequiresReview, "Moved by another instance.", _time.GetUtcNow());
+                await otherInstance.SaveChangesAsync();
+                return Json(Issued(contestedOrderNum));
+            }
+
+            return Json(path == $"/order/{nextOrderNum}" ? Issued(nextOrderNum) : OrderNotFound());
+        });
+        await using var factory = CreateFactory(skyLink);
+
+        await RunPendingJobOnceAsync(factory);
+
+        await using var dbContext = _postgres.CreateDbContext();
+        var contested = await dbContext.Bookings.SingleAsync(saved => saved.Id == contestedBooking.Id);
+        Assert.Equal(BookingStatus.RequiresReview, contested.Status);
+        Assert.Null(contested.TicketNumber);
+        var change = Assert.Single(await GetHistoryAsync(dbContext, contestedBooking.Id));
+        Assert.Equal("Moved by another instance.", change.Note);
+        Assert.Equal(BookingStatus.Confirmed, await GetStatusAsync(dbContext, nextBooking.Id));
+        Assert.Single(await GetHistoryAsync(dbContext, nextBooking.Id));
+    }
+
     private WebApplicationFactory<Program> CreateFactory(StubHttpMessageHandler skyLink, int statusTimeoutSeconds = 10) =>
         _postgres.ApiFactory.WithWebHostBuilder(builder =>
         {

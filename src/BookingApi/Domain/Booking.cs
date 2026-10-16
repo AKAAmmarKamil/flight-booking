@@ -35,6 +35,7 @@ public class Booking : BaseEntity<string>
 
     public DateOnly PassengerBirthDate { get; set; }
 
+    [ConcurrencyCheck]
     public BookingStatus Status { get; set; }
 
     public DateTimeOffset StatusChangedAt { get; set; }

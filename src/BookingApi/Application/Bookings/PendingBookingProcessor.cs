@@ -40,31 +40,62 @@ public class PendingBookingProcessor
             var result = await GetSupplierStatusAsync(booking, cancellationToken);
             var now = _timeProvider.GetUtcNow();
 
+            string note;
             if (result?.Outcome == SupplierBookingOutcome.Confirmed)
             {
+                note = result.Note;
                 booking.Pnr = result.Pnr;
                 booking.TicketNumber = result.TicketNumber;
-                booking.MoveTo(BookingStatus.Confirmed, result.Note, now);
-                _logger.LogInformation("Booking {BookingId} is Confirmed: {Note}", booking.Id, result.Note);
+                booking.MoveTo(BookingStatus.Confirmed, note, now);
             }
             else if (result?.Outcome is SupplierBookingOutcome.Refused or SupplierBookingOutcome.Unknown)
             {
-                booking.MoveTo(BookingStatus.RequiresReview, result.Note, now);
-                _logger.LogWarning("Booking {BookingId} requires review: {Note}", booking.Id, result.Note);
+                note = result.Note;
+                booking.MoveTo(BookingStatus.RequiresReview, note, now);
             }
             else if (now - booking.StatusChangedAt >= TimeSpan.FromSeconds(_options.PendingTimeoutSeconds))
             {
-                var note = $"{booking.Supplier} order {booking.SupplierReference} still not issued {_options.PendingTimeoutSeconds} s after it became Pending: "
-                           + $"a ticket may still be issued; check with {booking.Supplier}.";
+                note = $"{booking.Supplier} order {booking.SupplierReference} still not issued {_options.PendingTimeoutSeconds} s after it became Pending: "
+                       + $"a ticket may still be issued; check with {booking.Supplier}.";
                 booking.MoveTo(BookingStatus.RequiresReview, note, now);
-                _logger.LogWarning("Booking {BookingId} requires review: {Note}", booking.Id, note);
             }
             else
             {
                 continue;
             }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another instance moved this booking out of Pending first; its change stands, ours is dropped.
+                _logger.LogInformation("Booking {BookingId} was already moved out of Pending by another instance.", booking.Id);
+                DiscardUnsavedChanges();
+                continue;
+            }
+
+            if (booking.Status == BookingStatus.RequiresReview)
+            {
+                _logger.LogWarning("Booking {BookingId} requires review: {Note}", booking.Id, note);
+            }
+            else
+            {
+                _logger.LogInformation("Booking {BookingId} is {Status}: {Note}", booking.Id, booking.Status, note);
+            }
+        }
+    }
+
+    private void DiscardUnsavedChanges()
+    {
+        // Only the rejected booking and its new history row: the bookings still waiting in this run stay tracked.
+        var unsavedEntries = _dbContext.ChangeTracker.Entries()
+            .Where(entry => entry.State != EntityState.Unchanged)
+            .ToList();
+        foreach (var entry in unsavedEntries)
+        {
+            entry.State = EntityState.Detached;
         }
     }
 
