@@ -1,3 +1,4 @@
+using BookingApi.Application.Bookings;
 using BookingApi.Application.Pricing;
 using BookingApi.Application.Search;
 using BookingApi.Application.Wallets;
@@ -21,6 +22,7 @@ public static class ApplicationRegistration
 
         services.AddScoped<IWalletService, WalletService>();
         services.AddScoped<ISearchService, SearchService>();
+        services.AddScoped<IBookingService, BookingService>();
 
         return services;
     }
