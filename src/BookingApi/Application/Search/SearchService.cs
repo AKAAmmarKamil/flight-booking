@@ -9,8 +9,6 @@ namespace BookingApi.Application.Search;
 
 public class SearchService : ISearchService
 {
-    private static readonly TimeSpan OfferLifetime = TimeSpan.FromMinutes(30);
-
     private readonly IEnumerable<IFlightSupplier> _suppliers;
     private readonly PriceCalculator _priceCalculator;
     private readonly SearchOptions _options;
@@ -117,7 +115,7 @@ public class SearchService : ISearchService
                 PriceIqd = pricedOffer.PriceIqd,
                 Adults = adults,
                 CreatedAt = now,
-                ExpiresAt = now + OfferLifetime
+                ExpiresAt = now + TimeSpan.FromMinutes(_options.OfferLifetimeMinutes)
             })
             .ToList();
 

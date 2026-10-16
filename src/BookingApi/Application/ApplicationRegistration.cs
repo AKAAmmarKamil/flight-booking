@@ -18,6 +18,7 @@ public static class ApplicationRegistration
         services.AddOptions<SearchOptions>()
             .BindConfiguration("Search")
             .Validate(options => options.TimeoutSeconds > 0, "Search:TimeoutSeconds must be positive.")
+            .Validate(options => options.OfferLifetimeMinutes > 0, "Search:OfferLifetimeMinutes must be positive.")
             .ValidateOnStart();
 
         services.AddOptions<PendingPollerOptions>()
