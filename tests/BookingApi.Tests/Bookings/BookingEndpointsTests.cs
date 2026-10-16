@@ -280,10 +280,11 @@ public class BookingEndpointsTests
     }
 
     [Fact]
-    public async Task Booking_SkyLink_ISSUING_becomes_Pending_with_order_number()
+    public async Task Booking_SkyLink_ISSUING_becomes_Pending_then_job_makes_it_Confirmed()
     {
         var skyLink = SkyLinkAnsweringTicketingWith(
-            """{ "errorCode": "0", "data": { "orderNum": "917000000001", "status": "ISSUING" } }""");
+            """{ "errorCode": "0", "data": { "orderNum": "917000000001", "status": "ISSUING" } }""",
+            """{ "errorCode": "0", "data": { "orderNum": "917000000001", "status": "ISSUED", "pnr": "Q8W2ER", "ticketNumber": "6071234567890" } }""");
         await using var factory = CreateFactory(skyLink: skyLink);
         var client = factory.CreateClient();
         var userId = await CreateWalletAsync(client, 1_000_000);
@@ -294,9 +295,22 @@ public class BookingEndpointsTests
         Assert.Equal(BookingStatus.Pending, result.Status);
         Assert.Null(result.TicketNumber);
         await using var dbContext = _postgres.CreateDbContext();
-        var booking = await dbContext.Bookings.SingleAsync(saved => saved.Id == result.BookingId);
-        Assert.Equal("917000000001", booking.SupplierReference);
+        var pendingBooking = await dbContext.Bookings.SingleAsync(saved => saved.Id == result.BookingId);
+        Assert.Equal("917000000001", pendingBooking.SupplierReference);
         Assert.Equal("SkyLink order 917000000001 is ISSUING", (await GetHistoryAsync(dbContext, result.BookingId)).Last().Note);
+
+        await RunPendingJobOnceAsync(factory);
+
+        var booking = await client.GetFromJsonAsync<BookingDto>($"/bookings/{result.BookingId}", JsonOptions);
+        Assert.NotNull(booking);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+        Assert.Equal("Q8W2ER", booking.Pnr);
+        Assert.Equal("6071234567890", booking.TicketNumber);
+        Assert.Equal(4, booking.History.Count);
+        var confirmed = booking.History.Last();
+        Assert.Equal(BookingStatus.Pending, confirmed.From);
+        Assert.Equal(BookingStatus.Confirmed, confirmed.To);
+        Assert.Equal("SkyLink order 917000000001 is ISSUED.", confirmed.Note);
     }
 
     [Fact]
@@ -440,13 +454,20 @@ public class BookingEndpointsTests
             _ => throw new InvalidOperationException($"Unexpected call to {request.RequestUri}")
         });
 
-    private static StubHttpMessageHandler SkyLinkAnsweringTicketingWith(string ticketingBody) =>
+    private static StubHttpMessageHandler SkyLinkAnsweringTicketingWith(string ticketingBody, string? orderStatusBody = null) =>
         new((request, _) => request.RequestUri!.AbsolutePath switch
         {
             "/order" => Task.FromResult(Json("""{ "errorCode": "0", "data": { "orderNum": "917000000001", "status": "TO_BE_PAID" } }""")),
             "/ticketing" => Task.FromResult(Json(ticketingBody)),
+            "/order/917000000001" when orderStatusBody != null => Task.FromResult(Json(orderStatusBody)),
             _ => throw new InvalidOperationException($"Unexpected call to {request.RequestUri}")
         });
+
+    private static async Task RunPendingJobOnceAsync(WebApplicationFactory<Program> factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<PendingBookingProcessor>().ProcessOnceAsync(CancellationToken.None);
+    }
 
     private static StubHttpMessageHandler UnexpectedCalls() =>
         new((request, _) => throw new InvalidOperationException($"Unexpected call to {request.RequestUri}"));
