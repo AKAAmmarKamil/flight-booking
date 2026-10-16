@@ -7,11 +7,11 @@ namespace BookingApi.Application.Search;
 public class SearchForm
 {
     [Required]
-    [RegularExpression("^[A-Z]{3}$", ErrorMessage = "From must be a 3-letter airport code in capitals.")]
+    [RegularExpression("^[A-Za-z]{3}$", ErrorMessage = "From must be a 3-letter airport code.")]
     public string From { get; set; } = string.Empty;
 
     [Required]
-    [RegularExpression("^[A-Z]{3}$", ErrorMessage = "To must be a 3-letter airport code in capitals.")]
+    [RegularExpression("^[A-Za-z]{3}$", ErrorMessage = "To must be a 3-letter airport code.")]
     public string To { get; set; } = string.Empty;
 
     [BindRequired]

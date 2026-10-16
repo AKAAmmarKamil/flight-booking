@@ -138,7 +138,27 @@ public class SearchEndpointsTests
     }
 
     [Theory]
-    [InlineData("from=bgw&to=IST&date={date}&adults=1")]
+    [InlineData("bgw", "ist")]
+    [InlineData("Bgw", "iST")]
+    public async Task Search_lowercase_airport_codes_are_sent_to_suppliers_in_capitals(string from, string to)
+    {
+        var aeroHub = new FakeFlightSupplier("AeroHub", "AH", TimeSpan.Zero, []);
+        var skyLink = new FakeFlightSupplier("SkyLink", "SL", TimeSpan.Zero, []);
+        await using var factory = CreateFactory(timeoutSeconds: 5, aeroHub, skyLink);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/search?from={from}&to={to}&date={FormatDate(SearchDate)}&adults=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.All(new[] { aeroHub, skyLink }, supplier =>
+        {
+            Assert.NotNull(supplier.LastSearchRequest);
+            Assert.Equal("BGW", supplier.LastSearchRequest.From);
+            Assert.Equal("IST", supplier.LastSearchRequest.To);
+        });
+    }
+
+    [Theory]
     [InlineData("from=BGW&to=ISTX&date={date}&adults=1")]
     [InlineData("to=IST&date={date}&adults=1")]
     [InlineData("from=BGW&to=IST&adults=1")]

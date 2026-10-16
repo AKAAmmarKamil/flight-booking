@@ -21,8 +21,12 @@ public sealed class FakeFlightSupplier : IFlightSupplier
 
     public string OfferIdPrefix { get; }
 
+    public SearchRequest? LastSearchRequest { get; private set; }
+
     public async Task<IReadOnlyList<SupplierOffer>> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
     {
+        LastSearchRequest = request;
+
         await Task.Delay(_delay, cancellationToken);
 
         if (_failure != null)

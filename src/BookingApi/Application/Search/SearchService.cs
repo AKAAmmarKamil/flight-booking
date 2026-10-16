@@ -37,8 +37,8 @@ public class SearchService : ISearchService
     public async Task<ServiceResponse<SearchResultDto>> SearchAsync(SearchForm form, CancellationToken cancellationToken)
     {
         SearchRequest request = new(
-            From: form.From,
-            To: form.To,
+            From: form.From.ToUpperInvariant(),
+            To: form.To.ToUpperInvariant(),
             Date: form.Date,
             Adults: form.Adults);
 
