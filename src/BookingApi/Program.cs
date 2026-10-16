@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using BookingApi.Application;
+using BookingApi.Infrastructure.BackgroundJobs;
 using BookingApi.Infrastructure.Persistence;
 using BookingApi.Infrastructure.Suppliers.AeroHub;
 using BookingApi.Infrastructure.Suppliers.SkyLink;
@@ -11,6 +12,7 @@ builder.Services.AddApplicationServices();
 builder.Services.AddPersistence();
 builder.Services.AddAeroHubSupplier();
 builder.Services.AddSkyLinkSupplier();
+builder.Services.AddHostedService<PendingBookingPoller>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

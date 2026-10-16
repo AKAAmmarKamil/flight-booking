@@ -1,6 +1,9 @@
+using BookingApi.Infrastructure.BackgroundJobs;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BookingApi.Tests.Persistence;
 
@@ -25,5 +28,11 @@ public sealed class BookingApiFactory : WebApplicationFactory<Program>
             ["SkyLink:PartnerId"] = "test-partner",
             ["SkyLink:PartnerKey"] = "test-key"
         }));
+        builder.ConfigureTestServices(services =>
+        {
+            // Tests call PendingBookingProcessor themselves; a running poller would process the same bookings in the background.
+            // Only this descriptor: RemoveAll<IHostedService> would also remove the web server's own hosted service.
+            services.Remove(services.Single(descriptor => descriptor.ImplementationType == typeof(PendingBookingPoller)));
+        });
     }
 }
